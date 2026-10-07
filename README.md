@@ -44,6 +44,7 @@ Set an API key for your preferred provider:
 export ANTHROPIC_API_KEY="your-api-key"
 # or: export OPENROUTER_API_KEY="your-api-key"
 # or: export OPENAI_API_KEY="your-api-key"
+# or: export MISTRAL_API_KEY="your-api-key"
 ```
 
 Run a review:
@@ -204,6 +205,7 @@ provider = "openrouter"
 | `openai` | `OPENAI_API_KEY` | Compatible with OpenAI models and custom OpenAI gateways. |
 | `codex` *(OpenAI)* | Reuses `~/.codex/auth.json` | Uses your existing ChatGPT Plus/Pro subscription token from OpenAI Codex CLI. No API key needed. [Details below](#chatgpt--codex-subscription). |
 | `openrouter` | `OPENROUTER_API_KEY` | Access open-weights & Chinese frontier models (Qwen, DeepSeek, Kimi, GLM). |
+| `mistral` | `MISTRAL_API_KEY` | Mistral models via the official API. |
 | `gemini` | `GEMINI_API_KEY` | Google Gemini models via official API. |
 | `azure` *(Entra ID)* | `auth = "azure-ad"` | Azure AI Foundry models with auto-refreshing tokens (requires `--features azure`). |
 

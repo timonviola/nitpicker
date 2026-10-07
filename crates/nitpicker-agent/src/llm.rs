@@ -7,7 +7,7 @@ use rig_core::completion::message::ReasoningContent;
 use rig_core::completion::message::ToolCall;
 use rig_core::completion::message::ToolChoice;
 use rig_core::completion::{AssistantContent, CompletionModel, Message};
-use rig_core::providers::{anthropic, gemini, openai, openrouter};
+use rig_core::providers::{anthropic, gemini, mistral, openai, openrouter};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::future::Future;
@@ -1290,6 +1290,10 @@ pub enum LLMProvider {
     OpenRouter {
         api_key_env: String,
     },
+    Mistral {
+        base_url: Option<String>,
+        api_key_env: Option<String>,
+    },
 }
 
 impl LLMProvider {
@@ -1364,6 +1368,19 @@ impl LLMProvider {
                     .http_headers(openrouter_headers()?)
                     .build()?;
                 Ok(Box::new(client))
+            }
+            LLMProvider::Mistral {
+                base_url,
+                api_key_env,
+            } => {
+                let key_env = api_key_env.as_deref().unwrap_or("MISTRAL_API_KEY");
+                let api_key = std::env::var(key_env)
+                    .or_else(|_| missing_or_local(key_env, base_url.as_deref()))?;
+                let mut builder = mistral::Client::builder().api_key(api_key);
+                if let Some(url) = base_url {
+                    builder = builder.base_url(url);
+                }
+                Ok(Box::new(builder.build()?))
             }
         }
     }
@@ -1593,6 +1610,38 @@ impl LLMClient for openai::CompletionsClient {
         Ok(CompletionResponse {
             choice: response.choice,
             finish_reason,
+            usage: TokenUsage::from_provider(&response.usage, CacheAccounting::InsidePrompt),
+            selected_model: Some(model_name),
+        })
+    }
+}
+
+impl LLMClient for mistral::Client {
+    async fn completion(&self, completion: Completion) -> Result<CompletionResponse> {
+        let model_name = completion.model.clone();
+        let mut request: rig_core::completion::CompletionRequest = completion.into();
+        request.model = Some(model_name.clone());
+        let model = self.completion_model(model_name.clone());
+        let response = model
+            .completion(request)
+            .await
+            .wrap_err_with(|| format!("Mistral completion failed for model '{model_name}'"))?;
+        let finish_reason = response
+            .raw_response
+            .choices
+            .first()
+            .map(|choice| match choice.finish_reason.as_str() {
+                "stop" => FinishReason::Stop,
+                "length" => FinishReason::MaxTokens,
+                "tool_calls" => FinishReason::ToolUse,
+                other => FinishReason::Other(other.to_string()),
+            })
+            .unwrap_or(FinishReason::None);
+        let finish_reason = resolve_finish_reason(&response.choice, finish_reason);
+        Ok(CompletionResponse {
+            choice: response.choice,
+            finish_reason,
+            // Mistral folds cache hits into `prompt_tokens` like the other OpenAI-shaped APIs.
             usage: TokenUsage::from_provider(&response.usage, CacheAccounting::InsidePrompt),
             selected_model: Some(model_name),
         })

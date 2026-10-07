@@ -74,9 +74,9 @@ static GEMINI_API: ProviderDef = ProviderDef {
 };
 static MISTRAL: ProviderDef = ProviderDef {
     name: "mistral",
-    provider: "openai",
+    provider: "mistral",
     model: "mistral-medium-3.5",
-    base_url: Some("https://api.mistral.ai/v1"),
+    base_url: None,
     api_key_env: "MISTRAL_API_KEY",
 };
 static OPENROUTER: ProviderDef = ProviderDef {

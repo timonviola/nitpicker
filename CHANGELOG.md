@@ -6,6 +6,14 @@ Notable user-visible changes are recorded here. The format follows
 
 ## [Unreleased]
 
+### Added
+
+- First-class `provider = "mistral"` support backed by rig's native Mistral client. The
+  provider activates automatically once `MISTRAL_API_KEY` is set: `nitpicker init` detects it
+  and generates a `mistral` reviewer (previously detected but routed through the generic
+  OpenAI-compatible provider with a hardcoded base URL). A `base_url`/`api_key_env` can still
+  override the endpoint and key on any `mistral` route, like the other providers.
+
 ### Fixed
 
 - A degraded preset review (a job or debate lane failed, no surviving findings) no longer

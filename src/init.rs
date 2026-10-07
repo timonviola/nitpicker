@@ -216,6 +216,7 @@ fn parse_provider_type(s: &str) -> config::ProviderType {
         "anthropic" => config::ProviderType::Anthropic,
         "gemini" => config::ProviderType::Gemini,
         "openrouter" => config::ProviderType::OpenRouter,
+        "mistral" => config::ProviderType::Mistral,
         _ => config::ProviderType::OpenAi,
     }
 }

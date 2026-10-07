@@ -147,6 +147,8 @@ pub enum ProviderType {
     OpenAi,
     #[serde(rename = "openrouter")]
     OpenRouter,
+    #[serde(rename = "mistral", alias = "mistral_compatible")]
+    Mistral,
 }
 
 impl ProviderType {
@@ -522,6 +524,7 @@ fn default_env_var(provider: &ProviderType) -> Option<&'static str> {
         ProviderType::Gemini => Some("GEMINI_API_KEY"),
         ProviderType::OpenAi => Some("OPENAI_API_KEY"),
         ProviderType::OpenRouter => Some("OPENROUTER_API_KEY"),
+        ProviderType::Mistral => Some("MISTRAL_API_KEY"),
     }
 }
 
@@ -765,6 +768,7 @@ mod tests {
                 "gemini" => ProviderType::Gemini,
                 "openai" => ProviderType::OpenAi,
                 "openrouter" => ProviderType::OpenRouter,
+                "mistral" => ProviderType::Mistral,
                 other => panic!("unknown provider in table: {other}"),
             }
         }
@@ -788,6 +792,8 @@ mod tests {
             ("gemini",     None,                None,                              None,             Some("GEMINI_API_KEY")),
             ("openai",     None,                None,                              None,             Some("OPENAI_API_KEY")),
             ("openrouter", None,                None,                              None,             Some("OPENROUTER_API_KEY")),
+            ("mistral",    None,                None,                              None,             Some("MISTRAL_API_KEY")),
+            ("mistral",    None,                None,                              Some("EXPLICIT"), Some("EXPLICIT")),
         ];
 
         for (name, auth, base_url, api_key_env, expected) in rows {
