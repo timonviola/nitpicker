@@ -241,17 +241,21 @@ impl Config {
     /// Require credentials for every configured route. Non-fallback execution keeps this eager
     /// check so a pure configuration error fails before any provider request is attempted.
     pub fn validate_credentials(&self) -> Result<()> {
+        let mut required: Vec<&str> = Vec::new();
         if let Some(env) = required_env_var(ClientSettings::from(&self.aggregator)) {
+            required.push(env);
             check_env_var(env)
                 .map_err(|_| eyre::eyre!("[aggregator]: env var {env} is not set"))?;
         }
         for reviewer in &self.reviewer {
             if let Some(env) = required_env_var(ClientSettings::from(reviewer)) {
+                required.push(env);
                 check_env_var(env).map_err(|_| {
                     eyre::eyre!("reviewer {}: env var {env} is not set", reviewer.name)
                 })?;
             }
         }
+        validate_single_provider_key(&required)?;
         Ok(())
     }
 
@@ -526,6 +530,63 @@ fn default_env_var(provider: &ProviderType) -> Option<&'static str> {
         ProviderType::OpenRouter => Some("OPENROUTER_API_KEY"),
         ProviderType::Mistral => Some("MISTRAL_API_KEY"),
     }
+}
+
+/// The provider API key env vars nitpicker reads by default, one family per provider. Gemini
+/// accepts either spelling, so the pair is one family and counts as a single key.
+const PROVIDER_KEY_FAMILIES: &[(&str, &[&str])] = &[
+    ("ANTHROPIC_API_KEY", &["ANTHROPIC_API_KEY"]),
+    ("GEMINI_API_KEY", &["GEMINI_API_KEY", "GOOGLE_AI_API_KEY"]),
+    ("OPENAI_API_KEY", &["OPENAI_API_KEY"]),
+    ("OPENROUTER_API_KEY", &["OPENROUTER_API_KEY"]),
+    ("MISTRAL_API_KEY", &["MISTRAL_API_KEY"]),
+];
+
+/// Reject shells exporting more than one provider API key when the extras serve no configured
+/// route. A stray key is silent until the wrong credential reaches a provider — a Mistral key
+/// exported as `OPENAI_API_KEY` surfaces as an OpenAI 401 rather than a configuration error —
+/// so validation stops and names the env var to unset. Configs that genuinely route through
+/// several providers stay valid: no key they require is counted as stray. Runs whose routes
+/// need no env key at all (codex/azure/local) skip the check — they cannot pick up a stray key.
+/// `required` holds the env vars the configured routes need (explicit `api_key_env` values
+/// included).
+fn validate_single_provider_key(required: &[&str]) -> Result<()> {
+    if required.is_empty() {
+        return Ok(());
+    }
+    let present: Vec<&str> = PROVIDER_KEY_FAMILIES
+        .iter()
+        .filter(|(_, envs)| envs.iter().any(|env| std::env::var(env).is_ok()))
+        .map(|(name, _)| *name)
+        .collect();
+    if present.len() < 2 {
+        return Ok(());
+    }
+    let stray = stray_provider_keys(required, &present);
+    if stray.is_empty() {
+        return Ok(());
+    }
+    let mut shown: Vec<&str> = required.to_vec();
+    shown.sort_unstable();
+    shown.dedup();
+    eyre::bail!(
+        "more than one provider API key is set ({}), but this config only needs {} — unset the \
+         rest, e.g. `unset {}`",
+        present.join(", "),
+        shown.join(", "),
+        stray[0]
+    );
+}
+
+/// Families from `PROVIDER_KEY_FAMILIES` that are exported (`present`) but required by no
+/// configured route (`required`).
+fn stray_provider_keys(required: &[&str], present: &[&str]) -> Vec<&'static str> {
+    PROVIDER_KEY_FAMILIES
+        .iter()
+        .filter(|(name, _)| present.contains(name))
+        .filter(|(_, envs)| !envs.iter().any(|env| required.contains(env)))
+        .map(|(name, _)| *name)
+        .collect()
 }
 
 #[cfg(test)]
@@ -969,5 +1030,33 @@ mod tests {
                 "wrong error for {name:?}: {err:#}"
             );
         }
+    }
+
+    /// The stray-key guard's decision is env-independent: `stray_provider_keys` classifies which
+    /// exported families no route requires. Env presence itself is not unit-testable without
+    /// mutating process-global state mid-suite, so the pure classifier gets the table and the
+    /// env scan in `validate_single_provider_key` stays a thin wrapper.
+    #[test]
+    fn stray_provider_keys_flags_only_families_no_route_requires() {
+        // two keys exported, one required: the other is stray
+        let stray =
+            stray_provider_keys(&["MISTRAL_API_KEY"], &["OPENAI_API_KEY", "MISTRAL_API_KEY"]);
+        assert_eq!(stray, vec!["OPENAI_API_KEY"]);
+
+        // a config routing through both providers requires both: nothing is stray
+        let stray = stray_provider_keys(
+            &["OPENAI_API_KEY", "MISTRAL_API_KEY"],
+            &["OPENAI_API_KEY", "MISTRAL_API_KEY"],
+        );
+        assert!(stray.is_empty());
+
+        // the gemini pair is one family: either spelling satisfies it
+        let stray = stray_provider_keys(&["GOOGLE_AI_API_KEY"], &["GEMINI_API_KEY"]);
+        assert!(stray.is_empty());
+
+        // explicit api_key_env values are not families; exported default keys stay stray
+        let stray =
+            stray_provider_keys(&["MY_GATEWAY_KEY"], &["GEMINI_API_KEY", "MISTRAL_API_KEY"]);
+        assert_eq!(stray, vec!["GEMINI_API_KEY", "MISTRAL_API_KEY"]);
     }
 }

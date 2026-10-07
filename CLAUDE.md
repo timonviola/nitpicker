@@ -397,6 +397,8 @@ Reviewers automatically load project context from `CLAUDE.md` or `AGENTS.md` if 
 
 `nitpicker init --free` prefers OpenRouter in the generated config and writes `model = "free"` for OpenRouter slots when `OPENROUTER_API_KEY` is set. When the generated config uses two reviewer slots, it emits two OpenRouter free reviewers so both slots get free-model auto-selection. If the key is missing, init warns and falls back to the normal provider order.
 
+Strict-mode credential validation (`Config::validate_credentials`, skipped under `--fallback`) also rejects a shell exporting more than one provider API key when at least one is required by no configured route, naming the env var to `unset` — a stray key (a Mistral key exported as `OPENAI_API_KEY`) previously surfaced as an opaque provider 401 instead of a configuration error. Keys the config requires are never stray, so multi-provider configs still validate, and routes that need no env key at all (codex/azure/local) skip the check since they cannot pick up a stray key.
+
 ## Adding a new provider
 
 1. Add a variant to `ProviderType` in `config.rs` with a `#[serde(rename = "...")]`

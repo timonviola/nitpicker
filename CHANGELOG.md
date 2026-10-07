@@ -13,6 +13,13 @@ Notable user-visible changes are recorded here. The format follows
   and generates a `mistral` reviewer (previously detected but routed through the generic
   OpenAI-compatible provider with a hardcoded base URL). A `base_url`/`api_key_env` can still
   override the endpoint and key on any `mistral` route, like the other providers.
+- Strict-mode credential validation now rejects a shell exporting more than one provider API
+  key when the extras are required by no configured route (e.g. a stale `OPENAI_API_KEY` while
+  the config routes through `MISTRAL_API_KEY`), naming the env var to `unset`. A stray key
+  previously stayed silent until the wrong credential reached a provider and surfaced as an
+  opaque 401. Keys the config itself requires are never stray — multi-provider configs are
+  unaffected — and routes that need no env key (codex/azure/local) skip the check, as do
+  `--fallback` runs.
 
 ### Fixed
 
